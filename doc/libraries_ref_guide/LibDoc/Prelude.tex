@@ -55,6 +55,9 @@ representation for use with \te{\$display} system tasks.\\
 \hline
 \te{StringLiteral} &Types which can be created around strings.\\
 \hline
+\te{SplitPorts} & Types that are split into multiple ports (buses) in generated Verilog
+(instead of a single, flat, bitvector port) \\
+\hline
 \end{tabular}
 \end{center}
 
@@ -1763,7 +1766,127 @@ element of  data type \te{data\_t}\\
 \end{tabular}
 \end{center}
 
+%===================================================
 
+\subsubsection{SplitPorts}
+
+\label{sec-SplitPorts-typeclass}
+
+\index{SplitPorts@\te{SplitPorts}!\te{SplitPorts} type class}
+\index[typeclass]{SplitPorts}
+\index[function]{Prelude!splitPorts}
+\index[function]{Prelude!unsplitPorts}
+\index[function]{Prelude!portNames}
+
+NOTE: \hfill \fbox{\begin{minipage}{0.9\textwidth}\footnotesize
+  This is a new feature, introduced in the 2026.07 release.  We
+  welcome feedback on its usability and on this documentation.
+\end{minipage}}
+
+The {\tt SplitPorts} type class is used to improve the
+readability/visibility of \emph{bsc}-generated Verilog code
+(especially the corresponding waveforms).  Additionally, it can make
+it easier to interface \emph{bsc}-generated Verilog to external
+Verilog IP.
+
+Consider an interface method argument or result whose type is a
+user-defined type (a struct, or tagged union, or enum).  These
+normally appear in the generated Verilog as flat bit-vectors.  When we
+declare that type to be an instance of the {\tt SplitPorts} type
+class, it will instead appear in \emph{bsc}-generated Verilog as a
+collection of ports (for example, one port per struct field).
+
+NOTE: \hfill \fbox{\begin{minipage}{0.9\textwidth}\footnotesize
+
+Please see Section~\ref{sec-SplitPorts-package} which describes the
+use of the {\tt SplitPorts} type class in detail, including several
+concrete examples. That section also describes additional facilities
+available by importing the {\tt SplitPorts} and {\tt
+  SplitVector}packages.
+
+\end{minipage}}
+
+\vspace{1ex}
+
+In the Standard Prelude the type class is actually defined in {\BHb}
+syntax, but we show it below also in {\BSVb} syntax, for reference.
+It can be used by programs in either syntax.
+
+{\BHb} syntax:
+\begin{libverbatim}
+   class SplitPorts a p | a -> p where
+     type PortsOf a = p
+
+     -- Convert a value to a tuple of values corresponding to ports.
+     splitPorts :: a -> p
+
+     -- Combine a tuple of values corresponding to ports into a value.
+     unsplitPorts :: p -> a
+
+     -- Compute the list of port names for a type, given a base name.
+     -- This must be the same length as the tuple of values.
+     portNames :: a -> String -> List String
+      typeclass StringLiteral #(type data_t);
+          function data_t fromString(String x);
+      endtypeclass
+\end{libverbatim}
+
+{\BSVb} syntax:
+\begin{libverbatim}
+   typeclass SplitPorts #(a, p)
+     dependencies (a determines p);
+     typedef p (PortsOf #(a));
+
+     -- Convert a value to a tuple of values corresponding to ports.
+     function p splitPorts (a);
+
+     -- Combine a tuple of values corresponding to ports into a value.
+     function a unsplitPorts (p);
+
+     -- Compute the list of port names for a type, given a base name.
+     -- This must be the same length as the tuple of values.
+     fun List #(String) portNames (a x, String s);
+   endtypeclass
+\end{libverbatim}
+
+This is the central type class for port splitting.
+\begin{itemize}
+
+  \item ``{\tt a}'' is a user-defined type to be split into separate
+        ports. It is typically a structured type (struct, vector,
+        tuple, algebraic type (tagged union)).
+
+  \item ``{\tt p}'' is an $n$-tuple type whose components describe each desired RTL port.
+\end{itemize}
+
+\begin{center}
+
+\index{SplitPorts@\te{SplitPorts}!\te{splitPorts}   (function in type class)}
+\index{SplitPorts@\te{SplitPorts}!\te{unsplitPorts} (function in type class)}
+\index{SplitPorts@\te{SplitPorts}!\te{portNames}    (function in type class)}
+
+\index{unplitPorts@\te{unsplitPorts} (function in \te{SplitPorts} type class)}
+\index{portNames@\te{portNames} (function in \te{SplitPorts} type class)}
+
+\begin{tabular}{|p{1 in}|p{4in}|}
+\hline
+\multicolumn{2}{|c|}{\te{SplitPorts} Functions}\\
+\hline
+\hline
+{\tt splitPorts}   & Specifies exactly how a value of user type
+                     {\tt a} should be split into ports in generated Verilog (type
+                     {\tt p}) \\
+\hline
+{\tt unsplitPorts} & The inverse of {\tt splitPorts}, specifying
+                     how the split ports in the Verilog (type {\tt p})
+                     are reconstituted into the user type {\tt a} \\
+\hline
+{\tt portNames}    & Produces a list representing the desired names for
+                     the individual ports, which can be based on the original
+                     (unsplit) port name. \\
+\hline
+\end{tabular}
+\end{center}
 
 %===================================================
 
@@ -4247,8 +4370,51 @@ function Rules rJoinConflictFree(Rules x, Rules y);
       addRules(incReg(asReg(counter)));
 \end{verbatim}
 
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\com{Port}
+\subsubsection{Port}
+\label{sec-SplitPorts-Port-type}
 
+\index{Port@\te{Port} (type, for \te{SplitPorts})}
+\index{SplitPorts@\te{SplitPorts}!\te{Port} type}
 
+The \te{Port} type is used in definitions of instances of the
+\te{SplitPorts} type class (Section~\ref{sec-SplitPorts-typeclass}).
+
+\begin{quote}
+  {\BH} syntax:
+  \hmm\begin{tabular}[t]{l}
+    {\tt data Port t = Port t}
+  \end{tabular}
+\end{quote}
+
+\begin{quote}
+  {\BSV} syntax:
+  \hmm\begin{tabular}[t]{l}
+    {\tt typedef union tagged \{} \\
+    {\tt \hmm  t Port;} \\
+    {\tt \} Port \#(t);}
+  \end{tabular}
+\end{quote}
+
+Specifically, it is used in argument types of the {\tt splitPorts}
+function and the result type of the \te{unsplitPorts} function of the
+type class.  With respect to the \te{SplitPorts} type class
+declaration shown in Section~\ref{sec-SplitPorts-typeclass}, in any
+declaration of an instance of the type class, the type ``{\tt p}'' has
+the tuple-shape:
+
+\begin{quote}\tt
+(Port $t_1$, ..., Port $t_n$)
+\end{quote}
+
+where each tuple component describes one of the ports in the split.
+
+Please see Section~\ref{sec-SplitPorts-package} which describes the
+use of the {\tt SplitPorts} type class and the type {\tt Port} in
+detail, including several concrete examples. That section also
+describes additional facilities available by importing the {\tt
+  SplitPorts} package.
 
 % ================================================================
 % \subsubsection{Module}
